@@ -4,10 +4,42 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QGridLayout, QLabel, QWid
 from PyQt5.QtGui import QDoubleValidator
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from mpl_toolkits.mplot3d import Axes3D
+from stl import mesh
 from numpy import array
+import numpy as np
+from math import pi,cos,sin
 
 
 ###### Crie suas funções de translação, rotação, criação de referenciais, plotagem de setas e qualquer outra função que precisar
+def z_rotation(angle):
+    rotation_matrix=np.array([[cos(angle),-sin(angle),0,0],[sin(angle),cos(angle),0,0],[0,0,1,0],[0,0,0,1]])
+    return rotation_matrix
+
+def x_rotation(angle):
+    rotation_matrix=np.array([[1,0,0,0],[0, cos(angle),-sin(angle),0],[0, sin(angle), cos(angle),0],[0,0,0,1]])
+    return rotation_matrix
+
+def y_rotation(angle):
+    rotation_matrix=np.array([[cos(angle),0, sin(angle),0],[0,1,0,0],[-sin(angle), 0, cos(angle),0],[0,0,0,1]])
+    return rotation_matrix
+
+
+def draw_arrows(point,base,axis,length=1.5):
+    # The object base is a matrix, where each column represents the vector
+    # of one of the axis, written in homogeneous coordinates (ax,ay,az,0)
+    # Plot vector of x-axis
+    axis.quiver(point[0],point[1],point[2],base[0,0],base[1,0],base[2,0],color='red',pivot='tail',  length=length)
+    # Plot vector of y-axis
+    axis.quiver(point[0],point[1],point[2],base[0,1],base[1,1],base[2,1],color='green',pivot='tail',  length=length)
+    # Plot vector of z-axis
+    axis.quiver(point[0],point[1],point[2],base[0,2],base[1,2],base[2,2],color='blue',pivot='tail',  length=length)
+
+    return axis
+
+e1 = np.array([[1],[0],[0],[0]]) # X
+e2 = np.array([[0],[1],[0],[0]]) # Y
+e3 = np.array([[0],[0],[1],[0]]) # Z
+base = np.hstack((e1,e2,e3))
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -17,11 +49,19 @@ class MainWindow(QMainWindow):
         self.set_variables()
         #Ajustando a tela    
         self.setWindowTitle("Grid Layout")
-        self.setGeometry(100, 100,1280 , 720)
+        self.setGeometry(100, 100, 1280, 720)
         self.setup_ui()
 
     def set_variables(self):
-        self.objeto_original = [] #modificar
+        
+        your_mesh = mesh.Mesh.from_file('thinking.stl')
+        # Get the x, y, z coordinates contained in the mesh structure that are the
+        # vertices of the triangular faces of the object
+        x = your_mesh.x.flatten()
+        y = your_mesh.y.flatten()
+        z = your_mesh.z.flatten()
+        
+        self.objeto_original = array([x.T,y.T,z.T,np.ones(x.size)])
         self.objeto = self.objeto_original
         self.cam_original = [] #modificar
         self.cam = [] #modificar
@@ -214,6 +254,7 @@ class MainWindow(QMainWindow):
           
         self.ax1.grid('True')
         self.ax1.set_aspect('equal')  
+        self.ax1.plot(object_2d[0],object_2d[1])
         canvas_layout.addWidget(self.canvas1)
 
         # Criar um objeto FigureCanvas para exibir o gráfico 3D
@@ -221,6 +262,8 @@ class MainWindow(QMainWindow):
         self.ax2 = self.fig2.add_subplot(111, projection='3d')
         
         ##### Falta plotar o seu objeto 3D e os referenciais da câmera e do mundo
+        self.ax2.plot(self.objeto[0], self.objeto[1], self.objeto[2])
+    
         
         self.canvas2 = FigureCanvas(self.fig2)
         canvas_layout.addWidget(self.canvas2)
@@ -241,9 +284,23 @@ class MainWindow(QMainWindow):
     def update_cam(self, line_edits: list[QLineEdit]):
         return 
     
+    # Retorna o objeto em 2d projetado na camera
     def projection_2d(self):
-        return 
-    
+        # params intrínsecos
+        K = np.eye(3)
+
+        K[0][0] = self.dist_foc * (self.px_base / self.ccd[0])
+        K[0][1] = self.dist_foc * self.stheta      
+        K[0][2] = self.ox     
+
+        K[1][1] = self.dist_foc * (self.px_altura / self.ccd[1])
+        K[1][2] = self.oy
+        
+        P_can = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0]])
+        G = np.eye(4)
+        
+        return K @ P_can @ G @ self.objeto
+      
     def generate_intrinsic_params_matrix(self):
         return 
     
