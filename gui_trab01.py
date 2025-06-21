@@ -63,15 +63,15 @@ class MainWindow(QMainWindow):
         
         self.objeto_original = array([x.T,y.T,z.T,np.ones(x.size)])
         self.objeto = self.objeto_original
-        self.cam_original = [] #modificar
-        self.cam = [] #modificar
-        self.px_base = 1280  #modificar
-        self.px_altura = 720 #modificar
-        self.dist_foc = 50 #modificar
-        self.stheta = 0 #modificar
-        self.ox = self.px_base/2 #modificar
-        self.oy = self.px_altura/2 #modificar
-        self.ccd = [36,24] #modificar
+        self.cam_original = np.eye(4)
+        self.cam = self.cam_original
+        self.px_base = 1280  
+        self.px_altura = 720 
+        self.dist_foc = 50 
+        self.stheta = 0 
+        self.ox = self.px_base/2 
+        self.oy = self.px_altura/2 
+        self.ccd = [36,24] 
         self.projection_matrix = [] #modificar
         
     def setup_ui(self):
@@ -252,9 +252,12 @@ class MainWindow(QMainWindow):
 
         ##### Falta plotar o object_2d que retornou da projeção
           
+        # Inverter o Y
+        # self.ax1.set_xlim([0, self.px_base])
+        # self.ax1.set_ylim([self.px_altura, 0])
+        self.ax1.plot(object_2d[0],object_2d[1])
         self.ax1.grid('True')
         self.ax1.set_aspect('equal')  
-        self.ax1.plot(object_2d[0],object_2d[1])
         canvas_layout.addWidget(self.canvas1)
 
         # Criar um objeto FigureCanvas para exibir o gráfico 3D
@@ -275,18 +278,94 @@ class MainWindow(QMainWindow):
     ##### Você deverá criar as suas funções aqui
     
     def update_params_intrinsc(self, line_edits: list[QLineEdit]):
+        if line_edits[0].displayText():  # n_pixels_base
+            self.px_base = int(line_edits[0].displayText())
+            print("Update px_base")
         
+        if line_edits[1].displayText():  # n_pixels_altura
+            self.px_altura = int(line_edits[1].displayText())
+            print("Update px_altura")
+        
+        if line_edits[2].displayText():  # ccd_x
+            self.ccd = (float(line_edits[2].displayText()), self.ccd[1])
+            print("Update ccd_x")
+        
+        if line_edits[3].displayText():  # ccd_y
+            self.ccd = (self.ccd[0], float(line_edits[3].displayText()))
+            print("Update ccd_y")
+        
+        if line_edits[4].displayText():  # dist_foc
+            self.dist_foc = float(line_edits[4].displayText())
+            print("Update distancia focal")
+            
+        if line_edits[5].displayText():  # stheta
+            self.stheta = float(line_edits[5].displayText())
+            print("Update stheta")
+            
         return 
 
     def update_world(self, line_edits: list[QLineEdit]):
+        if line_edits[0].displayText():  # X trans
+            x_trans = float(line_edits[0].displayText())
+            print(f"transalte {x_trans} in x (world ref)")
+        
+        if line_edits[1].displayText():  # X rot
+            x_rot = float(line_edits[1].displayText())
+            print(f"rotate {x_rot} in x (world ref)")
+        
+        if line_edits[2].displayText():  # Y trans
+            y_trans = float(line_edits[2].displayText())
+            print(f"transalte {y_trans} in y (world ref)")
+        
+        if line_edits[3].displayText():  # Y rot
+            y_rot = float(line_edits[3].displayText())
+            print(f"rotate {y_rot} in y (world ref)")
+        
+        if line_edits[4].displayText():  # Z trans
+            ztrans = float(line_edits[4].displayText())
+            print(f"transalte {ztrans} in z (world ref)")
+            
+        if line_edits[5].displayText():  # Z rot
+            zrot = float(line_edits[5].displayText())
+            print(f"rotate {zrot} in z (world ref)")
         return
 
     def update_cam(self, line_edits: list[QLineEdit]):
+        if line_edits[0].displayText():  # X trans
+            x_trans = float(line_edits[0].displayText())
+            print(f"transalte {x_trans} in x (cam ref)")
+        
+        if line_edits[1].displayText():  # X rot
+            x_rot = float(line_edits[1].displayText())
+            print(f"rotate {x_rot} in x (cam ref)")
+        
+        if line_edits[2].displayText():  # Y trans
+            y_trans = float(line_edits[2].displayText())
+            print(f"transalte {y_trans} in y (cam ref)")
+        
+        if line_edits[3].displayText():  # Y rot
+            y_rot = float(line_edits[3].displayText())
+            print(f"rotate {y_rot} in y (cam ref)")
+        
+        if line_edits[4].displayText():  # Z trans
+            ztrans = float(line_edits[4].displayText())
+            print(f"transalte {ztrans} in z (cam ref)")
+            
+        if line_edits[5].displayText():  # Z rot
+            zrot = float(line_edits[5].displayText())
+            print(f"rotate {zrot} in z (cam ref)")
         return 
     
     # Retorna o objeto em 2d projetado na camera
     def projection_2d(self):
-        # params intrínsecos
+        K = self.generate_intrinsic_params_matrix()
+        P_can = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0]])
+        G = np.eye(4)#########################################
+        self.projection_matrix = K @ P_can @ G
+        
+        return  self.projection_matrix @ self.objeto
+      
+    def generate_intrinsic_params_matrix(self):
         K = np.eye(3)
 
         K[0][0] = self.dist_foc * (self.px_base / self.ccd[0])
@@ -296,19 +375,24 @@ class MainWindow(QMainWindow):
         K[1][1] = self.dist_foc * (self.px_altura / self.ccd[1])
         K[1][2] = self.oy
         
-        P_can = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0]])
-        G = np.eye(4)
-        
-        return K @ P_can @ G @ self.objeto
-      
-    def generate_intrinsic_params_matrix(self):
-        return 
+        return K
     
 
     def update_canvas(self):
         return 
     
     def reset_canvas(self):
+        self.objeto = self.objeto_original
+
+        self.cam = self.cam_original 
+        self.px_base = 1280  
+        self.px_altura = 720 
+        self.dist_foc = 50 
+        self.stheta = 0 
+        self.ox = self.px_base/2 
+        self.oy = self.px_altura/2 
+        self.ccd = [36,24] 
+        self.projection_matrix = np.eye(3)
         return
     
 if __name__ == '__main__':
