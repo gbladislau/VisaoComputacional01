@@ -9,21 +9,35 @@ from numpy import array
 import numpy as np
 from math import pi,cos,sin
 
-
 ###### Crie suas funções de translação, rotação, criação de referenciais, plotagem de setas e qualquer outra função que precisar
-def z_rotation(angle):
-    rotation_matrix=np.array([[cos(angle),-sin(angle),0,0],[sin(angle),cos(angle),0,0],[0,0,1,0],[0,0,0,1]])
-    return rotation_matrix
 
-def x_rotation(angle):
-    rotation_matrix=np.array([[1,0,0,0],[0, cos(angle),-sin(angle),0],[0, sin(angle), cos(angle),0],[0,0,0,1]])
-    return rotation_matrix
+def set_axes_equal(ax):
+    #Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    #cubes as cubes, etc..  This is one possible solution to Matplotlib's
+    #ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
 
-def y_rotation(angle):
-    rotation_matrix=np.array([[cos(angle),0, sin(angle),0],[0,1,0,0],[-sin(angle), 0, cos(angle),0],[0,0,0,1]])
-    return rotation_matrix
+    #Input
+    #  ax: a matplotlib axis, e.g., as output from plt.gca().
 
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
 
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+    
 def draw_arrows(point,base,axis,length=1.5):
     # The object base is a matrix, where each column represents the vector
     # of one of the axis, written in homogeneous coordinates (ax,ay,az,0)
@@ -36,10 +50,26 @@ def draw_arrows(point,base,axis,length=1.5):
 
     return axis
 
-e1 = np.array([[1],[0],[0],[0]]) # X
-e2 = np.array([[0],[1],[0],[0]]) # Y
-e3 = np.array([[0],[0],[1],[0]]) # Z
-base = np.hstack((e1,e2,e3))
+def z_rotation(angle):
+    rotation_matrix=np.array([[cos(angle),-sin(angle),0,0],[sin(angle),cos(angle),0,0],[0,0,1,0],[0,0,0,1]])
+    return rotation_matrix
+
+def x_rotation(angle):
+    rotation_matrix=np.array([[1,0,0,0],[0, cos(angle),-sin(angle),0],[0, sin(angle), cos(angle),0],[0,0,0,1]])
+    return rotation_matrix
+
+def y_rotation(angle):
+    rotation_matrix=np.array([[cos(angle),0, sin(angle),0],[0,1,0,0],[-sin(angle), 0, cos(angle),0],[0,0,0,1]])
+    return rotation_matrix
+
+def move (dx,dy,dz):
+    T = np.eye(4)
+    T[0,-1] = dx
+    T[1,-1] = dy
+    T[2,-1] = dz
+    return T
+
+# ---------------------------------------------------------------------------------------------------------------------------
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -52,27 +82,44 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1280, 720)
         self.setup_ui()
 
-    def set_variables(self):
+    def set_variables(self):      
+        # WORLD 
+        e1 = np.array([[1],[0],[0],[0]]) # X
+        e2 = np.array([[0],[1],[0],[0]]) # Y
+        e3 = np.array([[0],[0],[1],[0]]) # Z
+        self.base = np.hstack((e1,e2,e3))
         
-        your_mesh = mesh.Mesh.from_file('thinking.stl')
-        # Get the x, y, z coordinates contained in the mesh structure that are the
-        # vertices of the triangular faces of the object
+        # OBJ
+        your_mesh = mesh.Mesh.from_file('fox.stl')
+        # Get the x, y, z coordinates contained in the mesh structure
         x = your_mesh.x.flatten()
         y = your_mesh.y.flatten()
         z = your_mesh.z.flatten()
-        
-        self.objeto_original = array([x.T,y.T,z.T,np.ones(x.size)])
+        self.objeto_original = array([
+            (x.T - x.T[-1])/10,
+            (y.T - y.T[-1])/10,
+            (z.T - z.T[-1])/10,
+            np.ones(x.size)
+            ])
         self.objeto = self.objeto_original
+        
+        # CAM
         self.cam_original = np.eye(4)
-        self.cam = self.cam_original
+        
+        T = move(-10., 2, 4.9)
+        Ry = y_rotation(pi/2)
+        Rx = x_rotation(-pi/2)
+        self.M_cam = T @ Rx @ Ry
+        
+        self.cam = self.M_cam @ self.cam_original
         self.px_base = 1280  
         self.px_altura = 720 
-        self.dist_foc = 50 
+        self.dist_foc = 20 
         self.stheta = 0 
         self.ox = self.px_base/2 
         self.oy = self.px_altura/2 
         self.ccd = [36,24] 
-        self.projection_matrix = [] #modificar
+        self.projection_matrix = []
         
     def setup_ui(self):
         # Criar o layout de grade
@@ -243,18 +290,16 @@ class MainWindow(QMainWindow):
         self.ax1.set_title("Imagem")
         self.canvas1 = FigureCanvas(self.fig1)
 
-        ##### Falta acertar os limites do eixo X
+        ##### limites do eixo X
+        self.ax1.set_xlim([0, self.px_base])
         
-        ##### Falta acertar os limites do eixo Y
+        ##### limites do eixo Y
+        self.ax1.set_ylim([self.px_altura, 0])
         
         ##### Você deverá criar a função de projeção 
         object_2d = self.projection_2d()
 
         ##### Falta plotar o object_2d que retornou da projeção
-          
-        # Inverter o Y
-        # self.ax1.set_xlim([0, self.px_base])
-        # self.ax1.set_ylim([self.px_altura, 0])
         self.ax1.plot(object_2d[0],object_2d[1])
         self.ax1.grid('True')
         self.ax1.set_aspect('equal')  
@@ -266,7 +311,12 @@ class MainWindow(QMainWindow):
         
         ##### Falta plotar o seu objeto 3D e os referenciais da câmera e do mundo
         self.ax2.plot(self.objeto[0], self.objeto[1], self.objeto[2])
-    
+        point = np.array([[0],[0],[0],[1]])
+        draw_arrows(point, self.base, self.ax2, 1.5)
+        draw_arrows(self.cam[:,-1], self.cam[:,0:3], self.ax2, 1)
+        
+        # manter aspect ratio
+        set_axes_equal(self.ax2)
         
         self.canvas2 = FigureCanvas(self.fig2)
         canvas_layout.addWidget(self.canvas2)
@@ -301,69 +351,118 @@ class MainWindow(QMainWindow):
         if line_edits[5].displayText():  # stheta
             self.stheta = float(line_edits[5].displayText())
             print("Update stheta")
-            
+        
+        self.update_canvas()
         return 
 
     def update_world(self, line_edits: list[QLineEdit]):
+        x_trans, y_trans, z_trans = 0, 0, 0
         if line_edits[0].displayText():  # X trans
             x_trans = float(line_edits[0].displayText())
+            T = move(x_trans,0,0)
             print(f"transalte {x_trans} in x (world ref)")
+            self.cam = T @ self.cam
+            self.M_cam = T @ self.M_cam
         
         if line_edits[1].displayText():  # X rot
             x_rot = float(line_edits[1].displayText())
+            R = x_rotation(x_rot * (pi/180))
             print(f"rotate {x_rot} in x (world ref)")
+            self.cam = R @ self.cam
+            self.M_cam = R @ self.M_cam
         
         if line_edits[2].displayText():  # Y trans
             y_trans = float(line_edits[2].displayText())
+            T = move(0,y_trans,0)
             print(f"transalte {y_trans} in y (world ref)")
+            self.cam = T @ self.cam
+            self.M_cam = T @ self.M_cam
         
         if line_edits[3].displayText():  # Y rot
             y_rot = float(line_edits[3].displayText())
+            R = y_rotation(y_rot * (pi/180))
             print(f"rotate {y_rot} in y (world ref)")
+            self.cam = R @ self.cam
+            self.M_cam = R @ self.M_cam
         
         if line_edits[4].displayText():  # Z trans
-            ztrans = float(line_edits[4].displayText())
-            print(f"transalte {ztrans} in z (world ref)")
+            z_trans = float(line_edits[4].displayText())
+            T = move(0,0, z_trans)
+            print(f"transalte {z_trans} in z (world ref)")
+            self.cam = T @ self.cam
+            self.M_cam = T @ self.M_cam
             
         if line_edits[5].displayText():  # Z rot
-            zrot = float(line_edits[5].displayText())
-            print(f"rotate {zrot} in z (world ref)")
+            z_rot = float(line_edits[5].displayText())
+            R = z_rotation(z_rot * (pi/180))
+            print(f"rotate {z_rot} in z (world ref)")
+            self.cam = R @ self.cam
+            self.M_cam = R @ self.M_cam
+            
+        self.update_canvas()
         return
 
     def update_cam(self, line_edits: list[QLineEdit]):
         if line_edits[0].displayText():  # X trans
             x_trans = float(line_edits[0].displayText())
+            T = move(x_trans, 0, 0)
             print(f"transalte {x_trans} in x (cam ref)")
-        
+            cam_aux = np.linalg.inv(self.M_cam) @ self.cam
+            self.cam = self.M_cam @ T @ cam_aux
+            self.M_cam = self.M_cam @ T
+            
         if line_edits[1].displayText():  # X rot
             x_rot = float(line_edits[1].displayText())
+            R = x_rotation(x_rot * (pi/180))
             print(f"rotate {x_rot} in x (cam ref)")
+            cam_aux = np.linalg.inv(self.M_cam) @ self.cam
+            self.cam = self.M_cam @ R @ cam_aux
+            self.M_cam = self.M_cam @ R
         
         if line_edits[2].displayText():  # Y trans
             y_trans = float(line_edits[2].displayText())
+            T = move(0, y_trans, 0)
             print(f"transalte {y_trans} in y (cam ref)")
-        
+            cam_aux = np.linalg.inv(self.M_cam) @ self.cam
+            self.cam = self.M_cam @ T @ cam_aux
+            self.M_cam = self.M_cam @ T
+            
         if line_edits[3].displayText():  # Y rot
             y_rot = float(line_edits[3].displayText())
+            R = y_rotation(y_rot * (pi/180))
             print(f"rotate {y_rot} in y (cam ref)")
+            cam_aux = np.linalg.inv(self.M_cam) @ self.cam
+            self.cam = self.M_cam @ R @ cam_aux
+            self.M_cam = self.M_cam @ R
         
         if line_edits[4].displayText():  # Z trans
             ztrans = float(line_edits[4].displayText())
+            T = move(0, 0, ztrans)
             print(f"transalte {ztrans} in z (cam ref)")
+            cam_aux = np.linalg.inv(self.M_cam) @ self.cam
+            self.cam = self.M_cam @ T @ cam_aux
+            self.M_cam = self.M_cam @ T
             
         if line_edits[5].displayText():  # Z rot
-            zrot = float(line_edits[5].displayText())
-            print(f"rotate {zrot} in z (cam ref)")
+            z_rot = float(line_edits[5].displayText())
+            R = z_rotation(z_rot * (pi/180))
+            print(f"rotate {z_rot} in z (cam ref)")
+            cam_aux = np.linalg.inv(self.M_cam) @ self.cam
+            self.cam = self.M_cam @ R @ cam_aux
+            self.M_cam = self.M_cam @ R
+        
+        self.update_canvas()
         return 
     
     # Retorna o objeto em 2d projetado na camera
     def projection_2d(self):
         K = self.generate_intrinsic_params_matrix()
         P_can = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0]])
-        G = np.eye(4)#########################################
+        G = np.linalg.inv(self.M_cam)
         self.projection_matrix = K @ P_can @ G
-        
-        return  self.projection_matrix @ self.objeto
+        objeto_2d = self.projection_matrix @ self.objeto
+        imagem = objeto_2d/objeto_2d[2]
+        return imagem
       
     def generate_intrinsic_params_matrix(self):
         K = np.eye(3)
@@ -379,20 +478,40 @@ class MainWindow(QMainWindow):
     
 
     def update_canvas(self):
+        print("Reloading canvas")
+  
+        # Clear and recreate 2D plot
+        self.fig1.clear()
+        self.ax1 = self.fig1.add_subplot(111)
+        self.ax1.set_title("Imagem")
+        self.ax1.set_xlim([0, self.px_base])
+        self.ax1.set_ylim([self.px_altura, 0])
+        self.ax1.set_aspect('equal')
+        self.ax1.grid(True)
+
+        object_2d = self.projection_2d()
+        self.ax1.plot(object_2d[0], object_2d[1])
+
+        self.canvas1.draw()
+
+        # Clear and recreate 3D plot
+        self.fig2.clear()
+        self.ax2 = self.fig2.add_subplot(111, projection='3d')
+
+        self.ax2.plot(self.objeto[0], self.objeto[1], self.objeto[2])
+        point = np.array([[0], [0], [0], [1]])
+        draw_arrows(point, self.base, self.ax2, 1.5)
+        draw_arrows(self.cam[:, -1], self.cam[:, 0:3], self.ax2, 1)
+
+        set_axes_equal(self.ax2)
+
+        self.canvas2.draw()
         return 
     
     def reset_canvas(self):
-        self.objeto = self.objeto_original
-
-        self.cam = self.cam_original 
-        self.px_base = 1280  
-        self.px_altura = 720 
-        self.dist_foc = 50 
-        self.stheta = 0 
-        self.ox = self.px_base/2 
-        self.oy = self.px_altura/2 
-        self.ccd = [36,24] 
-        self.projection_matrix = np.eye(3)
+        print("Reseting all variables")
+        self.set_variables()
+        self.update_canvas()
         return
     
 if __name__ == '__main__':
